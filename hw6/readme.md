@@ -1,30 +1,36 @@
-1. запустил docker-compose (compose.png)
+1. запустил docker-compose (compose1.png)
 docker compose up -d
 docker compose ps -a
 
-2. проверил топики kafka (kafka-topics.png)
+2. проверил статус Kafka Connect и наличие плагинов коннекторов (plugins.png)
+curl http://localhost:8083
+curl http://localhost:8083/connector-plugins
+
+3. проверил топики kafka (kafka-topics-before.png)
 docker exec kafka1 kafka-topics --list --bootstrap-server kafka1:19092,kafka2:19093,kafka3:19094
 
-3. подключился к контейнеру postgres, создал тестовую таблицу clients и загрузил данные из файла /data/Data.csv, потом проверил первые 5 строк (pg-create.png)
+4. подключился к контейнеру postgres, создал тестовую таблицу customers и загрузил данные (pg-create-customers.png)
 docker exec -ti postgres psql -U postgres
-CREATE TABLE clients (id int PRIMARY KEY, first_name text, last_name text, gender text, card_number text, bill numeric(7,2), created_date timestamp, modified_date timestamp);
-COPY clients FROM '/data/Demo.csv' WITH (FORMAT csv, HEADER true);
-SELECT * FROM clients LIMIT 5;
+CREATE TABLE customers (id INT PRIMARY KEY, name TEXT, age INT);
+INSERT INTO customers (id, name, age) VALUES (5, 'Fred', 34);
+INSERT INTO customers (id, name, age) VALUES (7, 'Sue', 25);
+INSERT INTO customers (id, name, age) VALUES (2, 'Bill', 51);
+SELECT * FROM customers;
 
-4. создал clients-connector и проверил его доступность в Kafka Connect (connect.png)
-curl -X POST --data-binary "@clients.json" -H "Content-Type: application/json" http://localhost:8083/connectors
+5. создал customers-connector и проверил его доступность в Kafka Connect (new-connector.png)
+curl -X POST --data-binary "@customers.json" -H "Content-Type: application/json" http://localhost:8083/connectors
 curl http://localhost:8083/connectors
-curl http://localhost:8083/connectors/clients-connector/status
+curl http://localhost:8083/connectors/customers-connector/status
 
-5. снова проверил топики кафки и убедился что добавился новый топик postgres.clients (kafka-topics1.png)
+6. снова проверил топики кафки и убедился что добавился новый топик postgres.public.customers (kafka-topics-after.png)
 docker exec kafka1 kafka-topics --list --bootstrap-server kafka1:19092,kafka2:19093,kafka3:19094
 
-6. прочитал топик postgres.clients с начала и вывел 1000 сообщений (consumer.png)
-docker exec kafka1 kafka-console-consumer --topic postgres.clients --bootstrap-server kafka1:19092,kafka2:19093,kafka3:19094 --from-beginning --property print.offset=true
+6. прочитал топик postgres.public.customers
+docker exec kafka1 kafka-console-consumer --topic postgres.public.customers --bootstrap-server kafka1:19092,kafka2:19093,kafka3:19094 --property print.offset=true --property print.key=true --from-beginning
 
-7. сделал UPDATE записи с id 262 в БД clients, изменил bill = 5000 и обновил modified_date, чтобы запись попала в топик postgres.clients (updated262.png)
 
-8. добавил в БД новую запись с id 1001
-INSERT INTO clients VALUES (1001, 'Andrey', 'Koptev', 'Male', '1231313133131', 13500.0, current_timestamp(0), current_timestamp(0));
+7. добавил в БД новую запись (pg-insert-one.png)
+INSERT INTO customers VALUES (10, 'Andrey', 38);
 
-9. убедился, что новое сообщение попало в топик postgres.clients (inserted1001.png)
+9. убедился, что новое сообщение попало в топик postgres.public.customers (inserted.png)
+
